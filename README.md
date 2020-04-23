@@ -1,6 +1,12 @@
 # qc_mentorship_project
 The repository containing the code that developed for the 2020 Quantum mentorship program. Many thanks to my mentor Guoming Wang!
 
+# Activate environment
+`$ source env/bin/activate`
+
+In order to deactivate the environment
+
+`$ deactivate`
 
 # About
 The [Quantum open source foundation (qosf)](https://qosf.org/) offers a [quantum mentorship program](https://qosf.org/qc_mentorship/) that allows newcomers to the field to work on an open source project with the support of an expert. I applied and was selected to participate in this program in 2020 with the support of my mentor Guoming Wang.
