@@ -1,12 +1,27 @@
 # qc_mentorship_project
 The repository containing the code that developed for the 2020 Quantum mentorship program. Many thanks to my mentor Guoming Wang!
 
+
+# Create a new virtual environment
+`python3 -m venv /path/to/new/virtual/environment`
+
+After installing the virtual environment locally, run the 
+following command to install the environment requirements
+
+`python -m pip install --upgrade pip`
+`python install -r requirements.txt`
+
+
 # Activate environment
 `$ source env/bin/activate`
 
 In order to deactivate the environment
 
 `$ deactivate`
+
+# Add the virtual environment to the jupyter notebook Kernel
+`pip install ipykernel`
+`ipython kernel install --user --name=projectname`
 
 # About
 The [Quantum open source foundation (qosf)](https://qosf.org/) offers a [quantum mentorship program](https://qosf.org/qc_mentorship/) that allows newcomers to the field to work on an open source project with the support of an expert. I applied and was selected to participate in this program in 2020 with the support of my mentor Guoming Wang.
