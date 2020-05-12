@@ -13,8 +13,10 @@ class Portfolio():
 
         '''
 
+        # The number of items in the portfolio
         self.N_portfolio = N_portfolio
 
+        # The number of quibits required is twice the number of items
         self.N_qubits = 2*N_portfolio
 
         # Initialize the quibits that will be used to represent the portfolio
@@ -23,9 +25,6 @@ class Portfolio():
         # The indices required for this problem
         # (portfolio index, s^+_i index, s^-_i index
         self.portfolio_indices = [(i,2*i,2*i+1) for i in range(N_portfolio)]
-
-        # Instantiate the circuit object
-        #self.circuit = cirq.Circuit()
 
         # Instantiate the returns vector
         self.mu = sympy.symbols(["mu_"+str(k) for k in range(N_portfolio)])
@@ -39,26 +38,156 @@ class Portfolio():
         # Instantiate the transaction cost
         self.T = sympy.symbols("T")
 
+        # The constraint function
         self.D = sympy.symbols("D")
 
-        # instantiate the previous weights
+        # instantiate the previous weights for the portfolio
         self.y = sympy.symbols(["y_"+str(k) for k in range(N_portfolio)])
 
         return None
 
-    def QAOA_circuit(self,p=1):
+    def benchmark_values(self):
+        '''
+        The returns and covariance matrix for the stocks:
+
+        AMP, ANZ, BHP, BXB, CBA, CSL, IAG, TLS
+
+        in 2018
+        '''
+
+
+        mu = np.array([0.000401, 0.000061, 0.000916,-0.000619,0.000212, 0.001477, 0.001047,-0.000881])
+
+        sigma = np.array([[99.8,42.5, 37.2,40.3,38.0,30.0,46.8,14.9],
+                  [42.5, 100.5, 41.1, 15.2, 71.1, 27.8, 47.5, 12.7],
+                  [37.2, 41.1, 181.3, 17.9, 38.4, 27.9, 39.0, 8.3],
+                  [40.3, 15.2, 17.9, 253.1, 12.4, 48.7, 33.3, 3.8],
+                  [38.0, 71.1, 38.4, 12.4,84.7, 28.5, 42.0, 13.1],
+                  [30.0, 27.8, 27.9, 48.7, 28.5, 173.1, 28.9, -12.7],
+                  [46.8, 47.5, 39.0, 33.3, 42.0, 28.9, 125.8, 14.6],
+                  [14.9, 12.7, 8.3, 3.8, 13.1, -12.7, 14.6, 179.0]])
+
+        sigma = sigma/10**6
+
+        # The constraint chosen in the paper
+        D = self.N_portfolio/2
+
+        lam = 0.9
+        T = 0
+        A = 0.03
+        y = np.zeros(len(mu))
+
+
+
+        return mu[0:self.N_portfolio],sigma[0:self.N_portfolio,0:self.N_portfolio],D,lam,T,A,y
+
+
+    def brute_force_search(self,lam,D,mu,sigma,T,y):
+        '''
+        This function determines when
+        '''
+
+        results={}
+
+        best_solutions = None
+
+        # Search the space of feasible solutions
+        # The values that can be taken by Zi
+        index = [-1,0, 1]
+
+        keys = list(itertools.product(index, repeat=self.N_portfolio))
+
+        # filter out non-feasable solutions
+        feasible = []
+
+        for key in keys:
+            z = np.array(key)
+            sum = np.sum(z)
+
+            if(sum==D):
+                feasible.append(z)
+
+        feasible = np.array(feasible)
+        state_costs = np.zeros(len(feasible))
+
+
+        # Find the best solutions and also the worst solutions
+        for k in range(len(feasible)):
+            state = feasible[k]
+            portfolio_cost = self.compute_portfolio_cost(lam, mu, sigma, state)
+            transaction_cost = self.compute_transaction_cost(T,y,state)
+            state_costs[k] = portfolio_cost+transaction_cost
+
+        print(state_costs)
+        max_cost_indx = np.argwhere(state_costs == np.amax(state_costs)).flatten()
+        min_cost_indx = np.argwhere(state_costs == np.amin(state_costs)).flatten()
+
+        results['lambda'] = lam
+        results['y'] = y
+        results['mu'] = mu
+        results['sigma'] = sigma
+        results['D'] = D
+
+        results['maximum_cost_states'] = feasible[max_cost_indx]
+        results['maximum_cost'] = max(state_costs)
+        results['volatility_of_maximum_cost_state'] = self.compute_portfolio_volatility(sigma, feasible[max_cost_indx][0])
+        results['returns_of_maximum_cost_state'] = self.compute_portfolio_returns(mu, feasible[max_cost_indx][0])
+
+
+        results['minimum_cost_states'] = feasible[min_cost_indx]
+        results['minimum_cost'] = min(state_costs)
+        results['volatility_of_minimum_cost_state'] = self.compute_portfolio_volatility(sigma, feasible[min_cost_indx][0])
+        results['returns_of_minimum_cost_state'] = self.compute_portfolio_returns(mu, feasible[min_cost_indx][0])
+
+        return results
+
+    def QAOA_circuit(self,p=1,betas=1,gammas=1):
         '''
         Construct the QAOA circuit with soft constraints
         '''
 
-        circuit = None
+        # Instantiate the circuit with the symbolic parameters that we will need
+        self.gammas = sympy.symbols(["gamma_" + str(k) for k in range(p)])
+        self.betas = sympy.symbols(["beta_" + str(k) for k in range(p)])
+
+        circuit = cirq.Circuit()
+        circuit = self.apply_hadamard(circuit)
+
+        for k in range(0,p):
+            beta = self.betas[k]
+            gamma = self.gammas[k]
+            circuit = self.apply_risk_return(circuit,gamma)
+            circuit = self.apply_transaction_cost(circuit,gamma)
+            circuit = self.apply_soft_constraint(circuit,gamma)
+            circuit = self.apply_QAOA_mixing_operator(circuit,beta)
+
+        circuit = self.apply_measurements(circuit)
 
 
         return circuit
 
-    def AOA_circuit(self,p=1):
+    def AOA_circuit(self,D,p=1):
+        '''
 
-        circuit = None
+        Generate the circuir for the alternating ansatz operator
+
+        '''
+
+        # Instantiate the circuit with the symbolic parameters that we will need
+        self.gammas = sympy.symbols(["gamma_" + str(k) for k in range(p)])
+        self.betas = sympy.symbols(["beta_" + str(k) for k in range(p)])
+
+        circuit = cirq.Circuit()
+        circuit = self.prepare_AOA_initial_state(circuit, D=D)
+
+        for k in range(0, p):
+            beta = self.betas[k]
+            gamma = self.gammas[k]
+            circuit = self.apply_risk_return(circuit, gamma)
+            circuit = self.apply_transaction_cost(circuit, gamma)
+            circuit = self.apply_AOA_mixing_operator(circuit, beta)
+
+        circuit = self.apply_measurements(circuit)
 
         return circuit
 
@@ -223,14 +352,11 @@ class Portfolio():
         return circuit
 
 
-    def apply_portfolio_lagrangian(self,circuit,gamma):
+    def apply_risk_return(self,circuit,gamma):
         '''
 
-        Applies the circuit that represents the Portfolio Lagrangian
-
-        Constructs the circuit that represents the soft constraint
-
-        P_
+        Applies the circuit that represents the Portfolio risk-return
+        cost function
         '''
 
 
@@ -304,7 +430,7 @@ class Portfolio():
 
         return circuit
 
-    def measure_circuit(self,circuit,A=None,D=None,T=None,mu=None,sigma=None,y=None, lam= None,key='m',n_trials=100):
+    def measure_circuit(self,circuit,A=None,D=None,T=None,mu=None,sigma=None,y=None, lam= None, betas= None,gammas=None,key='m',n_trials=100):
         '''
         This function resolves the input parameters and carries out the measurements.
 
@@ -316,6 +442,8 @@ class Portfolio():
         sigma -
         y -
         lam -
+        betas -
+        gammas -
         key -
         n_trials -
         '''
@@ -346,6 +474,16 @@ class Portfolio():
 
             for k in range(self.N_portfolio):
                 resolved_params[self.mu[k]] = mu[k]
+
+        if(betas is not None):
+
+            for k in range(len(betas)):
+                resolved_params[self.betas[k]] = betas[k]
+
+        if(gammas is not None):
+
+            for k in range(len(gammas)):
+                resolved_params[self.gammas[k]] = gammas[k]
 
         if(sigma is not None):
             for k1 in range(self.N_portfolio):
@@ -428,6 +566,29 @@ class Portfolio():
 
         return x
 
+    def compute_portfolio_volatility(self,sigma,zi):
+        '''
+
+        '''
+
+        c_sigma = 0.0
+        for k1 in range(self.N_portfolio):
+            for k2 in range(self.N_portfolio):
+                c_sigma += sigma[k1,k2]*zi[k1]*zi[k2]
+
+        return np.sqrt(c_sigma)
+
+    def compute_portfolio_returns(self,mu,zi):
+        '''
+
+        '''
+
+        c_mu = 0.0
+        for k1 in range(self.N_portfolio):
+            c_mu += mu[k1] * zi[k1]
+
+        return c_mu
+
     def compute_transaction_cost(self,T,y,zi):
         '''
 
@@ -488,7 +649,13 @@ class Portfolio():
 
         return expectation_value
 
+
     def compute_penalty_expectation_value(self,A,D,portfolio_holdings):
+        '''
+
+        Compute the cost of the soft constraint
+
+        '''
 
 
         expectation_value = 0
@@ -589,5 +756,62 @@ class Portfolio():
         results['counts'] = label_count
         results['probability'] = np.array(label_count) / np.sum(np.array(label_count))
         results['state_vector'] = np.array(state_vector)
+
+        return results
+
+    def grid_search(self,circuit,N_grid,A,D,T,mu,sigma,y,lam,n_trials=100):
+        '''
+        Carry out a grid search of
+        '''
+
+        results = {}
+
+        total_cost_grid = np.zeros((N_grid,N_grid))
+        penalty_cost_grid = np.zeros((N_grid, N_grid))
+        portfolio_cost_grid = np.zeros((N_grid, N_grid))
+        transaction_cost_grid = np.zeros((N_grid, N_grid))
+
+        betas = np.linspace(0.0,2.0*np.pi,N_grid)
+        gammas = np.linspace(0.0,2.0*np.pi,N_grid)
+
+        min_cost = 1e10
+        min_gamma = 0.0
+        min_beta = 0.0
+        min_holdings= None
+
+        for k1 in range(len(betas)):
+            for k2 in range(len(gammas)):
+                beta = betas[k1]
+                gamma = gammas[k2]
+                bitstrings = self.measure_circuit(circuit,A=A,D=D,T=T,mu=mu,sigma=sigma,y=y,lam=lam,betas=[beta],gammas=[gamma],n_trials=n_trials)
+                portfolio_holdings = self.convert_bitstrings_to_portfolio_holdings(bitstrings)
+
+                penalty_cost = self.compute_penalty_expectation_value(A, D, portfolio_holdings)
+                transaction_cost = self.compute_transaction_cost_expectation_value(T,y,portfolio_holdings)
+                portfolio_cost = self.compute_portfolio_cost_expectation_value(lam,mu,sigma,portfolio_holdings)
+                total_cost = penalty_cost+transaction_cost+portfolio_cost
+
+                transaction_cost_grid[k1,k2] = transaction_cost
+                penalty_cost_grid[k1,k2] = penalty_cost
+                portfolio_cost_grid[k1,k2] = portfolio_cost
+                total_cost_grid[k1,k2] = total_cost
+
+                if (total_cost <= min_cost):
+                    min_cost = total_cost
+                    min_gamma = gamma
+                    min_beta = beta
+                    min_holdings = portfolio_holdings
+
+
+        results['minimum_cost'] = min_cost
+        results['min_gamma'] = min_gamma
+        results['min_betas'] = min_beta
+        results['min_portfolio_holdings'] = min_holdings
+
+
+        results['total_cost_grid'] = total_cost_grid
+        results['portfolio_cost_grid'] = portfolio_cost_grid
+        results['penalty_cost_grid'] = penalty_cost_grid
+        results['transaction_cost_grid'] = transaction_cost_grid
 
         return results
