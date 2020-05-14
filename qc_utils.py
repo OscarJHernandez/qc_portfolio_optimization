@@ -2,7 +2,7 @@ import cirq
 import sympy
 import numpy as np
 import itertools
-import matplotlib.pyplot as plt
+from scipy.optimize import minimize
 
 
 
@@ -52,7 +52,7 @@ class Portfolio():
 
         AMP, ANZ, BHP, BXB, CBA, CSL, IAG, TLS
 
-        in 2018
+        from 2018,
         '''
 
 
@@ -77,17 +77,37 @@ class Portfolio():
         A = 0.03
         y = np.zeros(len(mu))
 
+        parameters={}
 
 
-        return mu[0:self.N_portfolio],sigma[0:self.N_portfolio,0:self.N_portfolio],D,lam,T,A,y
+        parameters['mu'] = mu[0:self.N_portfolio]
+        parameters['sigma'] = sigma[0:self.N_portfolio,0:self.N_portfolio]
+        parameters['D'] = D
+        parameters['lam'] = lam
+        parameters['T'] = T
+        parameters['A'] = A
+        parameters['y'] = y
 
 
-    def brute_force_search(self,lam,D,mu,sigma,T,y):
+
+        return parameters
+
+
+    def brute_force_search(self,parameters):
         '''
-        This function determines when
+        This function determines the optimal solutions by brute force.
         '''
 
         results={}
+
+
+        # Retrieve the values of the needed parameters
+        lam = parameters['lam']
+        D= parameters['D']
+        mu = parameters['mu']
+        sigma=parameters['sigma']
+        T=parameters['T']
+        y=parameters['y']
 
         best_solutions = None
 
@@ -118,7 +138,6 @@ class Portfolio():
             transaction_cost = self.compute_transaction_cost(T,y,state)
             state_costs[k] = portfolio_cost+transaction_cost
 
-        print(state_costs)
         max_cost_indx = np.argwhere(state_costs == np.amax(state_costs)).flatten()
         min_cost_indx = np.argwhere(state_costs == np.amin(state_costs)).flatten()
 
@@ -190,7 +209,6 @@ class Portfolio():
         circuit = self.apply_measurements(circuit)
 
         return circuit
-
 
     def exp_ZZ(self,angle,qubit1,qubit2):
         '''
@@ -390,7 +408,9 @@ class Portfolio():
         Constructs the circuit that represents the soft constraint and applies
         the Gamma angle.
 
-        C = A(\sum_i Z_i -D)^2
+        C = A*(\sum_i Z_i -D)^2
+
+        U = Exp[-i gamma * C]
         '''
 
         self.A = sympy.symbols("A")
@@ -398,9 +418,6 @@ class Portfolio():
         for i in range(self.N_portfolio):
 
             sp_i, sm_i = self.portfolio_indices[i][1],self.portfolio_indices[i][2]
-
-            #circuit.append(cirq.rz(2*gamma*self.A*self.D).on(self.qubits[sp_i]))
-            #circuit.append(cirq.rz(-2*gamma*self.A*self.D).on(self.qubits[sm_i]))
 
             # Exp[-i*AD*\sum_i (s^+_i -s^-_i)]
             circuit.append(self.exp_Z(-gamma*self.A*self.D,self.qubits[sp_i] ))
@@ -410,7 +427,6 @@ class Portfolio():
 
                 sp_j, sm_j = self.portfolio_indices[j][1],self.portfolio_indices[j][2]
 
-                #angle = (-1)*(-2*gamma/sympy.pi) * (self.A / 4)
 
                 if(i !=j):
                     circuit.append(self.exp_ZZ(-gamma*(self.A/4),self.qubits[sp_i],self.qubits[sp_j]))
@@ -418,19 +434,13 @@ class Portfolio():
                     circuit.append(self.exp_ZZ(gamma * (self.A / 4), self.qubits[sm_i], self.qubits[sp_j]))
                     circuit.append(self.exp_ZZ(-gamma * (self.A / 4), self.qubits[sm_i], self.qubits[sm_j]))
 
-                    #circuit.append(cirq.ZZPowGate(exponent= angle).on(self.qubits[sp_i],self.qubits[sp_j]))
-                    #circuit.append(cirq.ZZPowGate(exponent= -angle).on(self.qubits[sp_i],self.qubits[sm_j]))
-                    #circuit.append(cirq.ZZPowGate(exponent= -angle).on(self.qubits[sm_i],self.qubits[sp_j]))
-                    #circuit.append(cirq.ZZPowGate(exponent= angle).on(self.qubits[sm_i],self.qubits[sm_j]))
                 else:
                     circuit.append(self.exp_ZZ(gamma * (self.A / 4), self.qubits[sp_i], self.qubits[sm_j]))
                     circuit.append(self.exp_ZZ(gamma * (self.A / 4), self.qubits[sm_i], self.qubits[sp_j]))
-                    #circuit.append(cirq.ZZPowGate(exponent= -angle).on(self.qubits[sp_i],self.qubits[sm_j]))
-                    #circuit.append(cirq.ZZPowGate(exponent= -angle).on(self.qubits[sm_i],self.qubits[sp_j]))
 
         return circuit
 
-    def measure_circuit(self,circuit,A=None,D=None,T=None,mu=None,sigma=None,y=None, lam= None, betas= None,gammas=None,key='m',n_trials=100):
+    def measure_circuit(self,circuit,parameters={}, betas= None,gammas=None,key='m',n_trials=100):
         '''
         This function resolves the input parameters and carries out the measurements.
 
@@ -447,6 +457,16 @@ class Portfolio():
         key -
         n_trials -
         '''
+
+        # Retrieve the input parameters
+        lam = parameters['lam']
+        A = parameters['A']
+        D = parameters['D']
+        mu = parameters['mu']
+        sigma = parameters['sigma']
+        T = parameters['T']
+        y = parameters['y']
+
 
         resolved_params ={}
 
@@ -608,7 +628,7 @@ class Portfolio():
 
         return t_cost
 
-    def compute_transaction_cost_expectation_value(self,T,y,portfolio_holdings):
+    def compute_transaction_cost_expectation_value(self,parameters,portfolio_holdings):
         '''
 
         The expectation value of the cost function
@@ -622,6 +642,9 @@ class Portfolio():
 
         expectation_value = 0
 
+        T = parameters['T']
+        y = parameters['y']
+
         for i in range(len(portfolio_holdings['labels'])):
             zi = portfolio_holdings['state_vector'][i]
             prob_i = portfolio_holdings['probability'][i]
@@ -629,7 +652,7 @@ class Portfolio():
 
         return expectation_value
 
-    def compute_portfolio_cost_expectation_value(self,lam,mu,sigma,portfolio_holdings):
+    def compute_portfolio_cost_expectation_value(self,parameters,portfolio_holdings):
         '''
 
 
@@ -642,6 +665,10 @@ class Portfolio():
 
         expectation_value = 0
 
+        lam = parameters['lam']
+        mu = parameters['mu']
+        sigma = parameters['sigma']
+
         for i in range(len(portfolio_holdings['labels'])):
             zi = portfolio_holdings['state_vector'][i]
             prob_i = portfolio_holdings['probability'][i]
@@ -650,12 +677,15 @@ class Portfolio():
         return expectation_value
 
 
-    def compute_penalty_expectation_value(self,A,D,portfolio_holdings):
+    def compute_penalty_expectation_value(self,parameters,portfolio_holdings):
         '''
 
         Compute the cost of the soft constraint
 
         '''
+
+        A = parameters['A']
+        D = parameters['D']
 
 
         expectation_value = 0
@@ -666,6 +696,115 @@ class Portfolio():
             expectation_value+= prob_i*self.compute_penalty(A,D,zi)
 
         return expectation_value
+
+    def compute_total_cost_expectation_value(self, portfolio_holdings,parameters):
+        '''
+        Compute the expected value of a state
+        '''
+
+        expectation_value = 0
+
+        A = parameters['A']
+        D = parameters['D']
+        lam = parameters['lam']
+        mu = parameters['mu']
+        sigma = parameters['sigma']
+        T = parameters['T']
+        y = parameters['y']
+
+
+        for i in range(len(portfolio_holdings['labels'])):
+            zi = portfolio_holdings['state_vector'][i]
+            prob_i = portfolio_holdings['probability'][i]
+            portfolio_cost = self.compute_portfolio_cost(lam, mu, sigma, zi)
+            penalty_cost = self.compute_penalty(A,D,zi)
+            transaction_cost = self.compute_transaction_cost(T,y,zi)
+            total_cost = portfolio_cost+penalty_cost+transaction_cost
+            expectation_value += prob_i * total_cost
+
+        return expectation_value
+
+
+    def circuit_measurement_function(self,x,circuit,parameters,n_trials=100,p=1):
+        '''
+        This function optimizes the circuit
+        '''
+
+        gammas = x[0:p]
+        betas = x[p:]
+        bitstrings = self.measure_circuit(circuit, parameters=parameters, betas=betas, gammas=gammas, n_trials=n_trials)
+        portfolio_holdings = self.convert_bitstrings_to_portfolio_holdings(bitstrings)
+        energy_expectation_value = self.compute_total_cost_expectation_value(portfolio_holdings, parameters)
+
+        return energy_expectation_value
+
+
+    def optimize_circuit(self,circuit,parameters,n_trials,p):
+        '''
+        Carry out the optimization of a specified circuit
+        '''
+
+        x0 = np.random.rand(2*p)
+        res = minimize(self.circuit_measurement_function, x0,
+                       args =(circuit,parameters,n_trials,p),
+                       method='nelder-mead',
+                       options = {'xatol': 1e-8, 'disp': True})
+
+        # get the other results
+        gammas = res.x[0:p]
+        betas = res.x[p:]
+        bitstrings = self.measure_circuit(circuit, parameters=parameters, betas=betas, gammas=gammas, n_trials=n_trials)
+        portfolio_holdings = self.convert_bitstrings_to_portfolio_holdings(bitstrings)
+        energy_expectation_value = self.compute_total_cost_expectation_value(portfolio_holdings, parameters)
+
+
+        best_solutions = self.determine_best_solution_from_trials(parameters,portfolio_holdings)
+
+        results={}
+        results['portfolio_holdings'] = portfolio_holdings
+        results['best_solutions'] = best_solutions
+        results['optimal_gammas'] = gammas
+        results['optimal_betas'] =  betas
+        results['optimal_energy_measurement'] = energy_expectation_value
+
+        return results
+
+    def optimize_circuit_angles_cross_entropy(self,circuit,parameters,p,n_trials,iterations,f_elite,Nce_samples):
+        '''
+
+        '''
+
+        # The intitial values of the returns and the parameter covariance
+        sigma = np.identity(2*p)
+        mu = np.random.rand(2*p)
+
+        for i in range(iterations):
+            # Generate N-samples from the multivariate Gaussian
+            X = np.random.multivariate_normal(mu,sigma,Nce_samples)
+            E = np.zeros(len(X))
+            data = []
+
+            for k in range(len(X)):
+                E[k] = self.circuit_measurement_function(x=X[k], circuit=circuit, parameters=parameters, n_trials=n_trials, p=p)
+                data.append([*X[k],E[k]])
+
+            # Sort the value according to the best
+            sorted_data = np.array(sorted(data, key=lambda x: x[2], reverse=False))
+
+
+            # Now compute the new averages
+            N_elite = int(f_elite*Nce_samples)
+            X_elite = sorted_data[0:N_elite,0:2*p]
+            E_elite = sorted_data[0:N_elite,2*p:]
+
+            print(i,E_elite.mean(),E_elite.std())
+
+            # Compute the new values of mu and sigma
+            mu = np.mean(X_elite,axis=0)
+            sigma = np.cov(X_elite.T)
+
+        return mu,sigma
+
 
     def count_instances(self, bitstrings):
         '''
@@ -759,10 +898,67 @@ class Portfolio():
 
         return results
 
-    def grid_search(self,circuit,N_grid,A,D,T,mu,sigma,y,lam,n_trials=100):
+    def determine_best_solution_from_trials(self,parameters,portfolio_holdings):
         '''
-        Carry out a grid search of
+        For a set of results from measurements, determine the best solutions
         '''
+
+        lam = parameters['lam']
+        A = parameters['A']
+        D = parameters['D']
+        mu = parameters['mu']
+        sigma = parameters['sigma']
+        T = parameters['T']
+        y = parameters['y']
+
+        prob = portfolio_holdings['probability']
+
+        nonzero_indx = (prob>0)
+
+        nonzero_states = portfolio_holdings['state_vector'][nonzero_indx]
+
+        # Initialize the energy
+
+
+        energies = np.ones(len(nonzero_states))
+
+        # Determine the energy of these states and find the best solutions among the subset
+        k=0
+        for zi in nonzero_states:
+            E_penalty = self.compute_penalty(A,D,zi)
+            E_portfolio  = self.compute_portfolio_cost(lam,mu,sigma,zi)
+            E_transaction_cost =self.compute_transaction_cost(T,y,zi)
+            E_zi = E_penalty+E_portfolio+E_transaction_cost
+            energies[k] = E_zi
+            k+=1
+
+        energies = np.array(energies)
+
+        # Get the minimum energy of these experiments
+        E_min = min(energies)
+        E_min_indx = np.argwhere(energies == E_min).flatten()
+
+        min_states = nonzero_states[E_min_indx]
+
+        results={}
+        results['minimum_cost'] = E_min
+        results['minimum_cost_states'] = min_states
+
+        return results
+
+    def grid_search(self,circuit,parameters,N_grid,n_trials=100):
+        '''
+        Carry out a grid search of a circuit at depth p=1
+        '''
+
+        # Retrieve the parameters
+        #lam = parameters['lam']
+        #A = parameters['A']
+        #D = parameters['D']
+        #mu = parameters['mu']
+        #sigma = parameters['sigma']
+        #T = parameters['T']
+        #y = parameters['y']
 
         results = {}
 
@@ -783,12 +979,12 @@ class Portfolio():
             for k2 in range(len(gammas)):
                 beta = betas[k1]
                 gamma = gammas[k2]
-                bitstrings = self.measure_circuit(circuit,A=A,D=D,T=T,mu=mu,sigma=sigma,y=y,lam=lam,betas=[beta],gammas=[gamma],n_trials=n_trials)
+                bitstrings = self.measure_circuit(circuit,parameters=parameters,betas=[beta],gammas=[gamma],n_trials=n_trials)
                 portfolio_holdings = self.convert_bitstrings_to_portfolio_holdings(bitstrings)
 
-                penalty_cost = self.compute_penalty_expectation_value(A, D, portfolio_holdings)
-                transaction_cost = self.compute_transaction_cost_expectation_value(T,y,portfolio_holdings)
-                portfolio_cost = self.compute_portfolio_cost_expectation_value(lam,mu,sigma,portfolio_holdings)
+                penalty_cost = self.compute_penalty_expectation_value(parameters,portfolio_holdings)
+                transaction_cost = self.compute_transaction_cost_expectation_value(parameters,portfolio_holdings)
+                portfolio_cost = self.compute_portfolio_cost_expectation_value(parameters,portfolio_holdings)
                 total_cost = penalty_cost+transaction_cost+portfolio_cost
 
                 transaction_cost_grid[k1,k2] = transaction_cost
@@ -803,10 +999,12 @@ class Portfolio():
                     min_holdings = portfolio_holdings
 
 
+
         results['minimum_cost'] = min_cost
         results['min_gamma'] = min_gamma
         results['min_betas'] = min_beta
         results['min_portfolio_holdings'] = min_holdings
+        results['parameters'] = parameters
 
 
         results['total_cost_grid'] = total_cost_grid
