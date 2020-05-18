@@ -916,10 +916,9 @@ class Portfolio():
         nonzero_indx = (prob>0)
 
         nonzero_states = portfolio_holdings['state_vector'][nonzero_indx]
+        nonzero_probabilities = portfolio_holdings['probability'][nonzero_indx]
 
         # Initialize the energy
-
-
         energies = np.ones(len(nonzero_states))
 
         # Determine the energy of these states and find the best solutions among the subset
@@ -939,10 +938,12 @@ class Portfolio():
         E_min_indx = np.argwhere(energies == E_min).flatten()
 
         min_states = nonzero_states[E_min_indx]
+        min_states_probabilities = nonzero_probabilities[E_min_indx]
 
         results={}
         results['minimum_cost'] = E_min
         results['minimum_cost_states'] = min_states
+        results['minimum_cost_probabilities'] = min_states_probabilities
 
         return results
 
