@@ -3,7 +3,7 @@ import sympy
 import numpy as np
 import itertools
 from scipy.optimize import minimize
-
+from tqdm import tqdm
 
 
 class Portfolio():
@@ -442,20 +442,21 @@ class Portfolio():
 
     def measure_circuit(self,circuit,parameters={}, betas= None,gammas=None,key='m',n_trials=100):
         '''
-        This function resolves the input parameters and carries out the measurements.
+        This function resolves the input parameters and carries out the measurements of the circuits.
+        All symbolic parameters are resolved into values for calculation.
 
         Keyword arguments:
-        A -
-        D -
-        T -
-        mu -
-        sigma -
-        y -
-        lam -
-        betas -
-        gammas -
-        key -
-        n_trials -
+        A - the penalty scaling coefficient
+        D - the investment constraint
+        T - the normalized cost incurred if an asset is traded
+        mu -  the normalized average asset returns vector
+        sigma - the normalized asset returns covariance matrix
+        y - the previous portfolio position
+        lam - the asset manager control parameter
+        betas - the vector representing the angles for the mixer
+        gammas - the vector representing the angles for the cost function unitarity matrix
+        key - the key that is used for specifying what to measure in the circuit simulation.
+        n_trials - the number of times to run the circuit and collect the results
         '''
 
         # Retrieve the input parameters
@@ -523,10 +524,13 @@ class Portfolio():
 
     def convert_bitstring_to_z(self,x):
         '''
-        Convert a bit string of the measured qubits
+        Convert a bit string of the measured qubits to
+        portfolio holding.
+
+        f(x+,x-) = x+ - x- = y
 
         example:
-        [1,0,0,0] -> [1,0]
+        x=[1,0,0,0] -> y=[1,0]
         '''
 
         x = np.array(x).astype(int)
@@ -541,12 +545,13 @@ class Portfolio():
     def compute_penalty(self,A,D,zi):
         '''
 
-        Compute the soft-constraint Penalty function
+        Compute the soft-constraint Penalty function for 
+
+        penalty = A*(\sum Z_i -D)^2
 
         keyword arguments:
-        A -
-        D -
-
+        A - The penalty scaling parameter
+        D - The investment constraint
         '''
 
         penalty = A*(np.sum(zi)-D)**2
@@ -557,15 +562,23 @@ class Portfolio():
         '''
 
         The portfolio cost function for a single bitstring representing the
-        holdings
+        holdings.
 
+        C_RR(z) = \lambda \sum_{i,j} \sigma_{i,j} z_i z_j -(1-\lambda)*\sum_i \mu_i z_i
+
+        keyword arguments:
+        lam - Asset manager control parameter
+        mu -  The normalized average asset returns vector
+        sigma - The normalized asset returns covariance matrix
         '''
 
+        # The cost stemming from the risk
         c_sigma = 0.0
         for k1 in range(self.N_portfolio):
             for k2 in range(self.N_portfolio):
                 c_sigma += sigma[k1,k2]*zi[k1]*zi[k2]
 
+        # the cost stemming from the returns
         c_mu = 0.0
         for k1 in range(self.N_portfolio):
             c_mu+=mu[k1]*zi[k1]
@@ -588,7 +601,7 @@ class Portfolio():
 
     def compute_portfolio_volatility(self,sigma,zi):
         '''
-
+        volatility^2 = \sum_{ij}\sigma_{ij} z_i z_j
         '''
 
         c_sigma = 0.0
@@ -600,7 +613,7 @@ class Portfolio():
 
     def compute_portfolio_returns(self,mu,zi):
         '''
-
+        portfolio_returns = \sum_i \mu_i z_i
         '''
 
         c_mu = 0.0
@@ -613,12 +626,12 @@ class Portfolio():
         '''
 
         Transaction costs
+        C_T = \sum_i T*(1-\delta(y_i-z_i))
 
         keyword arguments:
         T - transactions costs
         y - previous portfolio holdings
-        zi -
-
+        z - the portfolio holdings vector
         '''
 
         t_cost = 0.0
@@ -634,10 +647,9 @@ class Portfolio():
         The expectation value of the cost function
 
         keyword arguments:
-        portfolio_holdings -
+        portfolio_holdings - dictionary of all the simulated portfolio holdings
         T - Transaction costs
         y - vector with previous portfolio holdings
-
         '''
 
         expectation_value = 0
@@ -738,17 +750,63 @@ class Portfolio():
 
         return energy_expectation_value
 
+    def optimize_circuit_GD(self,circuit,parameters,n_trials,p,lr=0.2,steps=10):
 
-    def optimize_circuit(self,circuit,parameters,n_trials,p):
+
+        # Initialize random gradients
+        E_gradients = np.random.rand(2*p)
+        x = np.random.rand(2*p)
+        dx = np.zeros(2 * p)
+
+        for k in tqdm(range(steps)):
+
+           # Compute the energy
+            E = self.circuit_measurement_function(x,circuit,parameters,n_trials=n_trials,p=p)
+
+            for i in range(len(x)):
+                dx[:] = 0.0
+                dx[i] = lr * E_gradients[i]
+                E_pdx = self.circuit_measurement_function(x + dx, circuit, parameters, n_trials=n_trials, p=p)
+                E_mdx = self.circuit_measurement_function(x - dx, circuit, parameters, n_trials=n_trials, p=p)
+                E_gradients[i] = 0.5*((E_pdx-E_mdx)/np.sqrt(np.sum(dx**2)))
+
+            #update the parameters
+            x = x-lr*E_gradients
+            x = np.array([x[i]+2.0*np.pi if x[i] < 0.0 else x[i]-2.0*np.pi if x[i] > 2.0*np.pi else x[i] for i in range(len(x))])
+
+        # get the other results
+        gammas = x[0:p]
+        betas = x[p:]
+        bitstrings = self.measure_circuit(circuit, parameters=parameters, betas=betas, gammas=gammas, n_trials=n_trials)
+        portfolio_holdings = self.convert_bitstrings_to_portfolio_holdings(bitstrings)
+        energy_expectation_value = self.compute_total_cost_expectation_value(portfolio_holdings, parameters)
+        best_solutions = self.determine_best_solution_from_trials(parameters, portfolio_holdings)
+
+        results={}
+        results['portfolio_holdings'] = portfolio_holdings
+        results['best_solutions'] = best_solutions
+        results['optimal_gammas'] = gammas
+        results['optimal_betas'] =  betas
+        results['optimal_energy_measurement'] = energy_expectation_value
+
+        return results
+
+
+    def optimize_circuit(self,circuit,parameters,n_trials,p,maxiter=50):
         '''
-        Carry out the optimization of a specified circuit
+        Carry out the optimization of a specified circuit using the scipy-minimizer
+
         '''
 
         x0 = np.random.rand(2*p)
         res = minimize(self.circuit_measurement_function, x0,
                        args =(circuit,parameters,n_trials,p),
                        method='nelder-mead',
-                       options = {'xatol': 1e-8, 'disp': True})
+                       options = {'maxiter': maxiter, 'disp': True})
+
+        print('=' * 100)
+        print('optimal cost: ', res.fun)
+        print('='*100)
 
         # get the other results
         gammas = res.x[0:p]
@@ -771,16 +829,42 @@ class Portfolio():
 
     def optimize_circuit_angles_cross_entropy(self,circuit,parameters,p,n_trials,iterations,f_elite,Nce_samples):
         '''
+        This function uses the cross-entropy method to optimize the circuit angle parameters
 
+        keyword arguments:
+        parameters -
+        p -
+        n_trials -
+        iterations -
+        f_elite -
+        Nce_samples -
         '''
 
         # The intitial values of the returns and the parameter covariance
         sigma = np.identity(2*p)
-        mu = np.random.rand(2*p)
+        mu = np.random.uniform(0.0,2*np.pi,2*p)
 
         for i in range(iterations):
             # Generate N-samples from the multivariate Gaussian
             X = np.random.multivariate_normal(mu,sigma,Nce_samples)
+
+            # we use a truncated Gaussian, so we filter values accordilngly
+            # filter these samples so all angles lie between 0 and 2*pi
+            X = X[ [ all([(X[i,k]>= 0.0) & (X[i,k]<= 2.0*np.pi) for k in range(len(X[0]))]) for i in range(len(X))]]
+
+            # keep sampling until number of required samples is reached
+            k_samples = len(X)
+            while(k_samples <= Nce_samples):
+                X_sample = np.random.multivariate_normal(mu,sigma,Nce_samples)
+                X_filtered = X_sample[ [ all([(X_sample[i,k]>= 0.0) & (X_sample[i,k]<= 2.0*np.pi) for k in range(len(X_sample[0]))]) for i in range(len(X_sample))]]
+                X = np.concatenate((X,X_filtered))
+                k_samples = len(X)
+
+            # Remove the remaining samples
+            X = X[0:Nce_samples]
+
+            # check that
+
             E = np.zeros(len(X))
             data = []
 
@@ -789,26 +873,45 @@ class Portfolio():
                 data.append([*X[k],E[k]])
 
             # Sort the value according to the best
-            sorted_data = np.array(sorted(data, key=lambda x: x[2], reverse=False))
+            sorted_data = np.array(sorted(data, key=lambda x: x[2*p], reverse=False))
 
+            #print(sorted_data)
 
             # Now compute the new averages
             N_elite = int(f_elite*Nce_samples)
             X_elite = sorted_data[0:N_elite,0:2*p]
             E_elite = sorted_data[0:N_elite,2*p:]
 
-            print(i,E_elite.mean(),E_elite.std())
+            print('k={}, mean_E={:.6f}, std_E={:.6f}, gammas[pi]={}, betas[pi]={}'.format(i,E_elite.mean(),E_elite.std(),  mu[0:p]/np.pi,  mu[p:]/np.pi))
 
             # Compute the new values of mu and sigma
             mu = np.mean(X_elite,axis=0)
             sigma = np.cov(X_elite.T)
 
-        return mu,sigma
+
+        # get the other results
+        gammas = mu[0:p]
+        betas = mu[p:]
+        bitstrings = self.measure_circuit(circuit, parameters=parameters, betas=betas, gammas=gammas, n_trials=n_trials)
+        portfolio_holdings = self.convert_bitstrings_to_portfolio_holdings(bitstrings)
+        energy_expectation_value = self.compute_total_cost_expectation_value(portfolio_holdings, parameters)
+
+        best_solutions = self.determine_best_solution_from_trials(parameters, portfolio_holdings)
+
+        results = {}
+        results['portfolio_holdings'] = portfolio_holdings
+        results['best_solutions'] = best_solutions
+        results['optimal_gammas'] = gammas
+        results['optimal_betas'] = betas
+        results['optimal_energy_measurement'] = energy_expectation_value
+
+
+        return results
 
 
     def count_instances(self, bitstrings):
         '''
-        Counts the number of instances
+        Counts the number of instances for a collection of bistring samples
         '''
 
         # The dictionary to store the results
@@ -993,7 +1096,7 @@ class Portfolio():
                 portfolio_cost_grid[k1,k2] = portfolio_cost
                 total_cost_grid[k1,k2] = total_cost
 
-                if (total_cost <= min_cost):
+                if (total_cost < min_cost):
                     min_cost = total_cost
                     min_gamma = gamma
                     min_beta = beta
@@ -1006,6 +1109,9 @@ class Portfolio():
         results['min_betas'] = min_beta
         results['min_portfolio_holdings'] = min_holdings
         results['parameters'] = parameters
+
+        results['beta_grid'] = betas
+        results['gamma_grid'] = gammas
 
 
         results['total_cost_grid'] = total_cost_grid
