@@ -474,8 +474,12 @@ class Portfolio():
         # The cirq simulator object
         simulator = cirq.Simulator()
 
-        if(A is not None):
-            resolved_params[self.A] = A
+        # This parameters only exists for the QAOA cicuit with soft constraints
+        try:
+            if(A is not None):
+                resolved_params[self.A] = A
+        except:
+            pass
 
         if(D is not None):
             resolved_params[self.D] = D
@@ -751,6 +755,9 @@ class Portfolio():
         return energy_expectation_value
 
     def optimize_circuit_GD(self,circuit,parameters,n_trials,p,lr=0.2,steps=10):
+        '''
+        Gradient descent optimization
+        '''
 
 
         # Initialize random gradients
@@ -761,7 +768,7 @@ class Portfolio():
         for k in tqdm(range(steps)):
 
            # Compute the energy
-            E = self.circuit_measurement_function(x,circuit,parameters,n_trials=n_trials,p=p)
+            #E = self.circuit_measurement_function(x,circuit,parameters,n_trials=n_trials,p=p)
 
             for i in range(len(x)):
                 dx[:] = 0.0
@@ -772,7 +779,7 @@ class Portfolio():
 
             #update the parameters
             x = x-lr*E_gradients
-            x = np.array([x[i]+2.0*np.pi if x[i] < 0.0 else x[i]-2.0*np.pi if x[i] > 2.0*np.pi else x[i] for i in range(len(x))])
+            #x = np.array([x[i]+2.0*np.pi if x[i] < 0.0 else x[i]-2.0*np.pi if x[i] > 2.0*np.pi else x[i] for i in range(len(x))])
 
         # get the other results
         gammas = x[0:p]
@@ -850,25 +857,25 @@ class Portfolio():
 
             # we use a truncated Gaussian, so we filter values accordilngly
             # filter these samples so all angles lie between 0 and 2*pi
-            X = X[ [ all([(X[i,k]>= 0.0) & (X[i,k]<= 2.0*np.pi) for k in range(len(X[0]))]) for i in range(len(X))]]
-
-            # keep sampling until number of required samples is reached
-            k_samples = len(X)
-            while(k_samples <= Nce_samples):
-                X_sample = np.random.multivariate_normal(mu,sigma,Nce_samples)
-                X_filtered = X_sample[ [ all([(X_sample[i,k]>= 0.0) & (X_sample[i,k]<= 2.0*np.pi) for k in range(len(X_sample[0]))]) for i in range(len(X_sample))]]
-                X = np.concatenate((X,X_filtered))
-                k_samples = len(X)
+            # X = X[ [ all([(X[i,k]>= 0.0) & (X[i,k]<= 2.0*np.pi) for k in range(len(X[0]))]) for i in range(len(X))]]
+            #
+            # # keep sampling until number of required samples is reached
+            # k_samples = len(X)
+            # while(k_samples <= Nce_samples):
+            #     X_sample = np.random.multivariate_normal(mu,sigma,Nce_samples)
+            #     X_filtered = X_sample[ [ all([(X_sample[i,k]>= 0.0) & (X_sample[i,k]<= 2.0*np.pi) for k in range(len(X_sample[0]))]) for i in range(len(X_sample))]]
+            #     X = np.concatenate((X,X_filtered))
+            #     k_samples = len(X)
 
             # Remove the remaining samples
-            X = X[0:Nce_samples]
+            #X = X[0:Nce_samples]
 
             # check that
 
             E = np.zeros(len(X))
             data = []
 
-            for k in range(len(X)):
+            for k in tqdm(range(len(X))):
                 E[k] = self.circuit_measurement_function(x=X[k], circuit=circuit, parameters=parameters, n_trials=n_trials, p=p)
                 data.append([*X[k],E[k]])
 
