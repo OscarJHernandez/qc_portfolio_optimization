@@ -4,6 +4,7 @@ import numpy as np
 import itertools
 from scipy.optimize import minimize
 from tqdm import tqdm
+import matplotlib.pyplot as plt
 
 
 class Portfolio():
@@ -1127,3 +1128,52 @@ class Portfolio():
         results['transaction_cost_grid'] = transaction_cost_grid
 
         return results
+
+
+    def plot(self,parameters):
+
+        optimizer_name = parameters['optimizer_name']
+        optimizer_data = parameters['optimizer_data']
+        p_depth = parameters['p_depth']
+        figure_number =parameters['figure_number']
+
+        fig = plt.figure()
+        fig.set_figheight(10)
+        fig.set_figwidth(18)
+        ax1 = fig.add_subplot(221)
+        ax2 = fig.add_subplot(222)
+        ax3 = fig.add_subplot(212)
+
+        ax1.set_title(r'$\langle \psi| C(z)|\psi \rangle$ vs $p$ [{}]'.format(optimizer_name) , fontsize=25)
+        ax1.set_xlabel(r"$p$-depth", fontsize=15)
+        ax1.set_ylabel(r"$\langle \psi| C(z)|\psi \rangle$", fontsize=15)
+        ax1.plot(p_depth, [optimizer_data[k]['optimal_energy_measurement'] for k in range(len(p_depth))]
+                 , marker='o',
+                 markersize=15)
+
+        ax2.set_title(r'$\langle x*| C(z)|x* \rangle$ vs $p$ [{}]'.format(optimizer_name), fontsize=25)
+        ax2.set_ylabel(r"$\langle x*| C(z)|x* \rangle$", fontsize=15)
+        ax2.set_xlabel(r"$p$-depth", fontsize=15)
+        ax2.plot(p_depth,
+                 [optimizer_data[k]['best_solutions']['minimum_cost'] for k in range(len(p_depth))],
+                 marker='o',
+                 markersize=15)
+
+        ax3.set_title(r'$p(x*)$ vs $p$ [{}]'.format(optimizer_name), fontsize=25)
+        ax3.set_xlabel(r"$p$-depth", fontsize=15)
+        ax3.set_ylabel(r"$p(x*)$", fontsize=15)
+        ax3.plot(p_depth, [optimizer_data[k]['best_solutions']['minimum_cost_probabilities'] for k in
+                           range(len(p_depth))],
+                 marker='o',
+                 markersize=15)
+        fig.tight_layout()
+
+        text = r'''
+        Figure {}: The convergence of the expectation value $\langle \psi|C(z)|\psi \rangle$ (upper left), the expectation value of 
+        the lowest energy solution $|x*\rangle$ (upper right), and the associated probability of the lowest energy  
+        state $p(x*)$ (bottom) as a function of the circuit depth $p$. The {} optimization routine was used to 
+        obtain the results.
+        '''.format(figure_number,optimizer_name)
+        fig.text(.1, -.17, text, ha='left', size=20)
+
+        return fig
