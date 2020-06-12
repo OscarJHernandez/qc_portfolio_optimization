@@ -1070,15 +1070,6 @@ class Portfolio():
         Carry out a grid search of a circuit at depth p=1
         '''
 
-        # Retrieve the parameters
-        #lam = parameters['lam']
-        #A = parameters['A']
-        #D = parameters['D']
-        #mu = parameters['mu']
-        #sigma = parameters['sigma']
-        #T = parameters['T']
-        #y = parameters['y']
-
         results = {}
 
         total_cost_grid = np.zeros((N_grid,N_grid))
@@ -1138,9 +1129,18 @@ class Portfolio():
 
 
     def plot(self,parameters):
+        '''
+        Generate the plots with captions needed for the notebook.
+        Generates three subfigures.
+        '''
 
         optimizer_name = parameters['optimizer_name']
         optimizer_data = parameters['optimizer_data']
+        lambda_parameter = parameters['lambda']
+        T_parameter = parameters['T']
+        D_parameter = parameters['D']
+        A_parameter = parameters['A']
+        N_portfolio = self.N_portfolio
         p_depth = parameters['p_depth']
         figure_number =parameters['figure_number']
 
@@ -1178,10 +1178,53 @@ class Portfolio():
         text = r'''
         Figure {}: The convergence of the expectation value $\langle \psi|C(z)|\psi \rangle$ (upper left), the expectation value of 
         the lowest energy solution $|x*\rangle$ (upper right), and the associated probability of the lowest energy  
-        state $p(x*)$ (bottom) as a function of the circuit depth $p$. The {} optimization routine was used to 
-        obtain the results.
-        '''.format(figure_number,optimizer_name)
-        fig.text(.1, -.17, text, ha='left', size=20)
+        state $p(x*)$ (bottom) as a function of the circuit depth $p$ for a $N$={} stock portfolio. The {} 
+        optimization routine was used to obtain the results. The parameter values $\lambda$={:.2f}, $T$={}, $A$={} were 
+        used. The investment constraint is $D$={}.
+        '''.format(figure_number,N_portfolio,optimizer_name,lambda_parameter,T_parameter,A_parameter,int(D_parameter))
+        fig.text(.1, -.20, text, ha='left', size=20)
+
+        return fig
+
+    def plot_approximation_ratio(self,parameters):
+        '''
+        Plots the approximation ratio as a function of circuit depth
+        '''
+
+        p_depth = parameters['p_depth']
+        optimizers = parameters['optimizers']
+        optimizer_names = parameters['optimizer_names']
+        figure_number = parameters['figure_number']
+        param_lambda = parameters['lambda']
+        param_T = parameters['T']
+        param_A = parameters['A']
+        param_D = int(parameters['D'])
+        param_title = parameters['title']
+
+        fig = plt.figure()
+        fig.set_figheight(10)
+        fig.set_figwidth(18)
+        ax1 = fig.add_subplot(111)
+        ax1.set_xlabel(r"$p$-depth", fontsize=15)
+        ax1.set_ylabel(r"Approximation constant", fontsize=15)
+
+        bruteforce_result = parameters['bruteforce_result']
+        best_brute_force_energy = bruteforce_result['minimum_cost']
+
+        ax1.set_title(param_title,size=20)
+
+        for k in range(len(optimizers)):
+            energy_array = optimizers[k]
+            best_energy_approx = np.array([energy_array[i]['best_solutions']['minimum_cost'] for i in range(len(p_depth))])
+            approx_ratio = best_brute_force_energy / best_energy_approx
+            ax1.plot(p_depth,approx_ratio,'-o',label=optimizer_names[k])
+
+        text = r'''
+                Figure {}: The approximation ratio as a function of circuit depth $p$ for the $N$={} 
+                stock portfolio using different circuit parameter optimization routines. The parameter 
+                values $\lambda$={:.2f}, $T$={}, $A$={} were used. The investment constraint is $D$={}.
+                '''.format(figure_number, self.N_portfolio,param_lambda,param_T,param_A,param_D)
+        fig.text(.1, -.07, text, ha='left', size=20)
 
         return fig
 
@@ -1193,8 +1236,7 @@ class Portfolio():
 
     def save_data_as_json(self,results,f_name):
         '''
-        Save the results of
-
+        Save the results of a dictionary as a json file
         '''
 
         with open(f_name,'w') as fl:
@@ -1203,6 +1245,9 @@ class Portfolio():
         return None
 
     def load_data_from_json(self,f_name):
+        '''
+        @params f_name: The name of the json file to open
+        '''
 
         with open(f_name) as json_file:
             json_load = json.load(json_file)
