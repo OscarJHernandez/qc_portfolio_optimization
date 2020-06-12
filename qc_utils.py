@@ -5,6 +5,7 @@ import itertools
 from scipy.optimize import minimize
 from tqdm import tqdm
 import matplotlib.pyplot as plt
+import json
 
 
 class Portfolio():
@@ -71,7 +72,10 @@ class Portfolio():
         sigma = sigma/10**6
 
         # The constraint chosen in the paper
-        D = self.N_portfolio/2
+        if(self.N_portfolio%2 == 0):
+            D = self.N_portfolio/2
+        else:
+            D = (self.N_portfolio+1)/2
 
         lam = 0.9
         T = 0
@@ -1022,12 +1026,15 @@ class Portfolio():
         T = parameters['T']
         y = parameters['y']
 
-        prob = portfolio_holdings['probability']
+        prob = np.array(portfolio_holdings['probability'])
 
         nonzero_indx = (prob>0)
 
-        nonzero_states = portfolio_holdings['state_vector'][nonzero_indx]
-        nonzero_probabilities = portfolio_holdings['probability'][nonzero_indx]
+        portfolio_holdings_states_np = np.array(portfolio_holdings['state_vector'])
+        portfolio_holdings_probability_np = np.array(portfolio_holdings['probability'])
+
+        nonzero_states = portfolio_holdings_states_np[nonzero_indx]
+        nonzero_probabilities = portfolio_holdings_probability_np[nonzero_indx]
 
         # Initialize the energy
         energies = np.ones(len(nonzero_states))
@@ -1177,3 +1184,27 @@ class Portfolio():
         fig.text(.1, -.17, text, ha='left', size=20)
 
         return fig
+
+    def json_default(self,obj):
+
+        if isinstance(obj, np.ndarray):
+            return obj.tolist()
+        raise TypeError('Not serializable')
+
+    def save_data_as_json(self,results,f_name):
+        '''
+        Save the results of
+
+        '''
+
+        with open(f_name,'w') as fl:
+            json.dump(results,fl,default=self.json_default)
+
+        return None
+
+    def load_data_from_json(self,f_name):
+
+        with open(f_name) as json_file:
+            json_load = json.load(json_file)
+
+        return json_load
