@@ -1102,7 +1102,7 @@ class Portfolio():
                 portfolio_cost_grid[k1,k2] = portfolio_cost
                 total_cost_grid[k1,k2] = total_cost
 
-                if (total_cost < min_cost):
+                if (total_cost < min_cost and beta!=0.0 and gamma != 0.0):
                     min_cost = total_cost
                     min_gamma = gamma
                     min_beta = beta
