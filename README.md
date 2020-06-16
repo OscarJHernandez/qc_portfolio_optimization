@@ -36,7 +36,7 @@ The hard constraints are imposed using the quantum alternating operator ansatz m
 The following notebooks are included in this repository
 
 [Quantum portfolio optimization notebook](/Final_notebook.ipynb)
-* Contains the main contributions of this project. Shows how to use the quantum circuits to optimize the portfolio  
+* Contains the main contributions of this project. Shows how to use the QAOA algorithm to optimize an N-stock portfolio.  
 
 
 [Cross entropy optimization explanation notebook](/Cross_Entropy_Optimization.ipynb)
