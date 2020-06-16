@@ -1,6 +1,10 @@
 # qc_mentorship_project
 The repository containing the code that developed for the 2020 Quantum mentorship program. Many thanks to my mentor Guoming Wang!
 
+This project was carried out on behalf of
+
+![Zorc Finance](/Financelogo.png)
+
 
 # Create a new virtual environment
 `python3 -m venv /path/to/new/virtual/environment`
