@@ -3,7 +3,7 @@
 This project was carried out on behalf of Zorc Finance for research and development purposes.
 
 <p align="center">
-<a href="www.zorc-finance.com">
+<a href="http://www.zorc-finance.com">
 <img src="Financelogo.png" alt="drawing" width="200"/>
 </a>
 </p>
