@@ -1,15 +1,13 @@
-# qc_mentorship_project
-
-This project was carried out on behalf of Zorc Finance for research and development purposes.
-
 <p align="center">
 <a href="http://www.zorc-finance.com">
-<img src="Financelogo.png" alt="drawing" width="200"/>
+<img src="Financelogo.png" alt="drawing" width="400"/>
 </a>
 </p>
 
 
-The repository containing the code that developed for the 2020 Quantum mentorship program. Many thanks to my mentor Guoming Wang!
+# qc_mentorship_project
+
+This project was carried out on behalf of [Zorc Finance](http://www.zorc-finance.com) by Oscar Javier Hernandez for research and development purposes as part of the [Quantum open-source foundations mentorship program for 2020](https://qosf.org/).  Many thanks to my mentor Guoming Wang!
 
 
 # Create a new virtual environment
