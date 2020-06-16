@@ -1,9 +1,15 @@
 # qc_mentorship_project
-The repository containing the code that developed for the 2020 Quantum mentorship program. Many thanks to my mentor Guoming Wang!
 
-This project was carried out on behalf of Zorc Finance
+This project was carried out on behalf of Zorc Finance for research and development purposes.
 
+<p align="center">
+<a href="www.zorc-finance.com">
 <img src="Financelogo.png" alt="drawing" width="200"/>
+</a>
+</p>
+
+
+The repository containing the code that developed for the 2020 Quantum mentorship program. Many thanks to my mentor Guoming Wang!
 
 
 # Create a new virtual environment
