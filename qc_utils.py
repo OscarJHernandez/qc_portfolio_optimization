@@ -193,7 +193,7 @@ class Portfolio():
     def AOA_circuit(self,D,p=1):
         '''
 
-        Generate the circuir for the alternating ansatz operator
+        Generate the circuir for the quantum alternating ansatz operator
 
         '''
 
@@ -841,15 +841,15 @@ class Portfolio():
 
     def optimize_circuit_angles_cross_entropy(self,circuit,parameters,p,n_trials,iterations,f_elite,Nce_samples):
         '''
-        This function uses the cross-entropy method to optimize the circuit angle parameters
+        This function uses the cross-entropy method to optimize the circuit angle parameters.
 
         keyword arguments:
-        parameters -
-        p -
-        n_trials -
-        iterations -
-        f_elite -
-        Nce_samples -
+        parameters - dictionary with parameters for the quantum circuit
+        p - the depth of the QAOA circuit
+        n_trials - The number of trials to run the quantum circuit
+        iterations - the number of iterations to do the cross-entropy optimization for
+        f_elite - the percentage of elite samples to use for the next iteration of the ce-algorithm
+        Nce_samples - The number or random samples to generate during each iteration of the ce-algorithm
         '''
 
         # The intitial values of the returns and the parameter covariance
@@ -860,23 +860,6 @@ class Portfolio():
             # Generate N-samples from the multivariate Gaussian
             X = np.random.multivariate_normal(mu,sigma,Nce_samples)
 
-            # we use a truncated Gaussian, so we filter values accordilngly
-            # filter these samples so all angles lie between 0 and 2*pi
-            # X = X[ [ all([(X[i,k]>= 0.0) & (X[i,k]<= 2.0*np.pi) for k in range(len(X[0]))]) for i in range(len(X))]]
-            #
-            # # keep sampling until number of required samples is reached
-            # k_samples = len(X)
-            # while(k_samples <= Nce_samples):
-            #     X_sample = np.random.multivariate_normal(mu,sigma,Nce_samples)
-            #     X_filtered = X_sample[ [ all([(X_sample[i,k]>= 0.0) & (X_sample[i,k]<= 2.0*np.pi) for k in range(len(X_sample[0]))]) for i in range(len(X_sample))]]
-            #     X = np.concatenate((X,X_filtered))
-            #     k_samples = len(X)
-
-            # Remove the remaining samples
-            #X = X[0:Nce_samples]
-
-            # check that
-
             E = np.zeros(len(X))
             data = []
 
@@ -886,8 +869,6 @@ class Portfolio():
 
             # Sort the value according to the best
             sorted_data = np.array(sorted(data, key=lambda x: x[2*p], reverse=False))
-
-            #print(sorted_data)
 
             # Now compute the new averages
             N_elite = int(f_elite*Nce_samples)
