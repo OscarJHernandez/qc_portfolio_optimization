@@ -9,7 +9,7 @@
 
 # qc_mentorship_project
 
-This project was carried out on behalf of [Zorc Finance](http://www.zorc-finance.com) by Oscar Javier Hernandez for research and development purposes as part of the [Quantum open-source foundations mentorship program for 2020](https://qosf.org/).  Many thanks to my mentor Guoming Wang!
+This project was carried out with support from [Zorc Finance](http://www.zorc-finance.com) by Oscar Javier Hernandez for research and development purposes as part of the [Quantum open-source foundations mentorship program for 2020](https://qosf.org/).  Many thanks to my mentor Guoming Wang!
 
 
 # Create a new virtual environment
