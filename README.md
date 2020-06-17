@@ -34,9 +34,7 @@ The [Quantum open source foundation (qosf)](https://qosf.org/) offers a [quantum
 </p>
 
 # Project
-The topic that was selected for this project was to implement the portfolio optimization problem as defined  [arXiv:1911.05296](https://arxiv.org/abs/1911.05296) who solve the portfolio rebalancing optimization problem using both soft and hard constraints. 
-
-The hard constraints are imposed using the quantum alternating operator ansatz method. While the soft constraint introduces a penalization term with its own hyper-parameter. There are some ways to choose reasonable values for them however, for this project we use the cross-entropy optimization method of [arXiv:2003.05292](https://arxiv.org/abs/2003.05292) in order to select the best hyperparameters.
+The topic that was selected for this project was to implement the portfolio optimization problem as defined  [arXiv:1911.05296](https://arxiv.org/abs/1911.05296) who solve the portfolio rebalancing optimization problem using both soft and hard constraints. We use different optimization methods to determine the optimal angles for the quantum circuits. In particular, I implemented the cross-entropy method for optimizing the angles that has also been used in [arXiv:2003.05292](https://arxiv.org/abs/2003.05292) to determine the best penalty-scaling hyperparameters.
 
 # Notebooks
 
