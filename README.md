@@ -1,4 +1,4 @@
-# qc_mentorship_project
+# A variational Quantum algorithm for portfolio optimization and rebalancing 
 
 This project was carried out with support from [Zorc Finance](http://www.zorc-finance.com) by Oscar Javier Hernandez for research and development purposes as well as being part of the [Quantum open-source foundations mentorship program for 2020](https://qosf.org/).  Many thanks to my mentor Guoming Wang!
 
