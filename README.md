@@ -1,5 +1,5 @@
 <p align="center">
-<img src="circuit.png" alt="drawing" width="400"/>
+<img src="circuit.png" alt="drawing" width="800"/>
 </p>
 
 # A variational Quantum algorithm for portfolio optimization and rebalancing 
