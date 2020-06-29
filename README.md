@@ -3,6 +3,7 @@
 </p>
 
 # A variational Quantum algorithm for portfolio optimization and rebalancing 
+[![Open In Colab](https://colab.research.google.com/assets/colab-badge.svg)](https://github.com/OscarJHernandez/qc_portfolio_optimization/blob/master/example_notebook.ipynb)
 
 This project was carried out with support from [Zorc Finance](http://www.zorc-finance.com) by Oscar Javier Hernandez for research and development purposes as well as being part of the [Quantum open-source foundations mentorship program for 2020](https://qosf.org/).  Many thanks to my mentor Guoming Wang!
 
