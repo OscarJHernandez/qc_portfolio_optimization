@@ -43,6 +43,12 @@ The [Quantum open source foundation (qosf)](https://qosf.org/) offers a [quantum
 # Project
 The topic that was selected for this project was to implement the portfolio optimization problem as defined  [arXiv:1911.05296](https://arxiv.org/abs/1911.05296) who solve the portfolio rebalancing optimization problem using both soft and hard constraints. We use different optimization methods to determine the optimal angles for the quantum circuits. In particular, I implemented the cross-entropy method for optimizing the angles that has also been used in [arXiv:2003.05292](https://arxiv.org/abs/2003.05292) to determine the best penalty-scaling hyperparameters.
 
+# Blog article
+
+To learn more about the project, you can find more details here  
+
+[Optimized portfolios with variational quantum algorithms](https://www.zorc-finance.com/post/optimal-portfolios-with-qaoa)
+
 # Notebooks
 
 The following notebooks are included in this repository
