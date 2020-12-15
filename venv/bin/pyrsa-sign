@@ -1,4 +1,4 @@
-#!/home/javier/Documents/qc_mentorship_project/venv/bin/python
+#!/home/oscar/Documents/qc_portfolio_optimization/venv/bin/python
 # -*- coding: utf-8 -*-
 import re
 import sys

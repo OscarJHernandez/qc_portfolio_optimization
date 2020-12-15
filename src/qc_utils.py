@@ -1,7 +1,4 @@
-from qiskit import *
-from qiskit.circuit import Parameter
-from qiskit.circuit.library import iSwapGate
-
+import cirq
 import sympy
 import numpy as np
 import itertools
@@ -15,7 +12,6 @@ class Portfolio():
 
     def __init__(self, N_portfolio=0, mu=None, sigma=None,lam=None):
         '''
-
         '''
 
         # The number of items in the portfolio
@@ -25,42 +21,36 @@ class Portfolio():
         self.N_qubits = 2*N_portfolio
 
         # Initialize the quibits that will be used to represent the portfolio
-        # The number of quibits required is twice the number of items
-        self.qubits =[i for i in range(self.N_qubits)]
+        self.qubits = [cirq.LineQubit(i) for i in range(self.N_qubits)]
 
         # The indices required for this problem
         # (portfolio index, s^+_i index, s^-_i index
         self.portfolio_indices = [(i,2*i,2*i+1) for i in range(N_portfolio)]
 
         # Instantiate the returns vector
-        self.mu = [Parameter("mu_"+str(k)) for k in range(N_portfolio)]
+        self.mu = sympy.symbols(["mu_"+str(k) for k in range(N_portfolio)])
 
         # instantiate the sigma matrix
-        self.sigma = [[Parameter("sigma_"+str(i)+str(j)) for i in range(N_portfolio)] for j in range(N_portfolio)]
+        self.sigma = sympy.symbols([["sigma_"+str(i)+str(j) for i in range(N_portfolio)] for j in range(N_portfolio)])
 
         # instantiate the Lambda value
-        self.lam = Parameter("L")
+        self.lam = sympy.symbols("L")
 
         # Instantiate the transaction cost
-        self.T = Parameter("T")
+        self.T = sympy.symbols("T")
 
         # The constraint function
-        self.D = Parameter("D")
-
-        # Parameter conrolling the soft constraint
-        self.A = Parameter("A")
+        self.D = sympy.symbols("D")
 
         # instantiate the previous weights for the portfolio
-        self.y = [Parameter("y"+str(k)) for k in range(N_portfolio)]
+        self.y = sympy.symbols(["y_"+str(k) for k in range(N_portfolio)])
 
         return None
 
     def benchmark_values(self):
         '''
         The returns and covariance matrix for the stocks:
-
         AMP, ANZ, BHP, BXB, CBA, CSL, IAG, TLS
-
         from 2018,
         '''
 
@@ -172,175 +162,166 @@ class Portfolio():
 
         return results
 
-    def QAOA_circuit(self,p=1,betas=1,gammas=1):
+    def QAOA_soft_circuit(self,p=1,betas=1,gammas=1):
         '''
         Construct the QAOA circuit with soft constraints
         '''
 
         # Instantiate the circuit with the symbolic parameters that we will need
-        self.gammas = [Parameter("gamma_" + str(k)) for k in range(p)]
-        self.betas = [Parameter("beta_" + str(k)) for k in range(p)]
+        self.gammas = sympy.symbols(["gamma_" + str(k) for k in range(p)])
+        self.betas = sympy.symbols(["beta_" + str(k) for k in range(p)])
 
-        circuit = QuantumCircuit(self.N_qubits)
-        circuit.h([i for i in range(self.N_qubits)])
+        circuit = cirq.Circuit()
+        circuit = self.apply_hadamard(circuit)
 
         for k in range(0,p):
             beta = self.betas[k]
-            gamma = self.gammas[k]            
+            gamma = self.gammas[k]
             circuit = self.apply_risk_return(circuit,gamma)
             circuit = self.apply_transaction_cost(circuit,gamma)
             circuit = self.apply_soft_constraint(circuit,gamma)
             circuit = self.apply_QAOA_mixing_operator(circuit,beta)
 
-        circuit.measure_all()
+        circuit = self.apply_measurements(circuit)
+
+
         return circuit
 
-    def AOA_circuit(self,D,p=1):
+    def QAOA_hard_circuit(self,D,p=1):
         '''
-        Construct the QAOA circuit with soft constraints
+        Generate the circuir for the quantum alternating ansatz operator
         '''
 
         # Instantiate the circuit with the symbolic parameters that we will need
-        self.gammas = [Parameter("gamma_" + str(k)) for k in range(p)]
-        self.betas = [Parameter("beta_" + str(k)) for k in range(p)]
+        self.gammas = sympy.symbols(["gamma_" + str(k) for k in range(p)])
+        self.betas = sympy.symbols(["beta_" + str(k) for k in range(p)])
 
-        circuit = QuantumCircuit(self.N_qubits)
-        circuit.h([i for i in range(self.N_qubits)])
+        circuit = cirq.Circuit()
+        circuit = self.prepare_AOA_initial_state(circuit, D=D)
 
-        for k in range(0,p):
+        for k in range(0, p):
             beta = self.betas[k]
-            gamma = self.gammas[k]            
-            circuit = self.apply_risk_return(circuit,gamma)
+            gamma = self.gammas[k]
+            circuit = self.apply_risk_return(circuit, gamma)
             circuit = self.apply_transaction_cost(circuit, gamma)
             circuit = self.apply_AOA_mixing_operator(circuit, beta)
 
-        circuit.measure_all()
+        circuit = self.apply_measurements(circuit)
+
         return circuit
 
-
-    def exp_ZZ(self,angle):
+    def exp_ZZ(self,angle,qubit1,qubit2):
         '''
-
         returns Exp[i*angle*ZZ]
-
         '''
-        circuit = QuantumCircuit(2)
-        circuit.rzz(angle/np.pi,0,1)
-        return circuit
 
+        return cirq.ZZPowGate(exponent= (angle/sympy.pi)).on(qubit1,qubit2)
 
-    def exp_XX_YY(self,angle):
+    def exp_XX_YY(self,angle,qubit1,qubit2):
         '''
-        
         returns Exp[i*angle*(XX+YY)]
-
-        '''
-        iswap = iSwapGate()
-        circuit = QuantumCircuit(2)
-        print(4.0*angle/np.pi)
-
-        #
-        ## Qiskit the gate iSwapGate unfortunately doesn't accept a parameter :-( 
-        ## Therefore the AOA_circuit doesn't work yet 
-        #
-        circuit.append(iswap.power(4.0*angle/np.pi),[0,1])
-        return circuit
-
-
-    def exp_X(self,angle):
         '''
 
+
+        return cirq.ISwapPowGate(exponent= (4.0*angle/sympy.pi)).on(qubit1,qubit2)
+
+
+        return None
+
+    def exp_X(self,angle,qubit):
+        '''
         returns Exp[i*angle*X]
-
         '''
-        circuit = QuantumCircuit(1)
-        circuit.rx(-2*angle,0)
-        return circuit
+        return cirq.rx(-2*angle).on(qubit)
 
-
-    def exp_Z(self,angle):
+    def exp_Z(self,angle,qubit):
         '''
         returns Exp[i*angle*Z]
         '''
-        circuit = QuantumCircuit(1)
-        circuit.rz(-2*angle,0)
-        return circuit
+
+        return cirq.rz(-2 * angle).on(qubit)
 
     def prepare_AOA_initial_state(self,circuit,D):
         '''
         Prepares the alternating Operator Ansatz
         initial state.
-
         |psi > = |10>^D \otimes ( (1/sqrt[2])*|00>+(1/sqrt[2])*|11>)^{N-D}
-
         Note that our convention is: |x^+ x^- > which is opposite to the paper
         '''
 
         # Prepare the |10> states, D-times
         for i in range(int(D)):
             sp_i, sm_i = self.portfolio_indices[i][1], self.portfolio_indices[i][2]
-            circuit.append(x(self.qubits[sp_i]))
+            circuit.append(cirq.X(self.qubits[sp_i]))
 
         # Prepare the Bell states ( (1/sqrt[2])*|00>+(1/sqrt[2])*|11>)^{N-D}
         for i in range(int(D), self.N_portfolio):
             sp_i, sm_i = self.portfolio_indices[i][1], self.portfolio_indices[i][2]
-            circuit.append(h(self.qubits[sp_i]))
-            circuit.append(cnot(self.qubits[sp_i], self.qubits[sm_i]))
+            circuit.append(cirq.H(self.qubits[sp_i]))
+            circuit.append(cirq.CNOT(self.qubits[sp_i], self.qubits[sm_i]))
 
         return circuit
 
 
+    def apply_hadamard(self,circuit):
+        '''
+        Applies a Hadamard gate to all quibits
+        '''
+
+        hadamard_operators = [cirq.H(self.qubits[i]) for i in range(len(self.qubits))]
+        circuit.append(hadamard_operators)
+
+        return circuit
 
     def apply_QAOA_mixing_operator(self,circuit,beta):
         '''
         Applies the QAOA mixing operator to the circuit
-
         U(beta) = Exp[-i*beta * \sum_i X_i]
-
         '''
-        mixer_operator = self.exp_X(-beta).to_instruction()
-        
-        [circuit.append(mixer_operator,[self.qubits[i]]) for i in range(self.N_qubits)]
+
+        #mixer_operators = [cirq.rx(2 * beta).on(self.qubits[i]) for i in range(self.N_qubits)]
+
+        mixer_operators = [self.exp_X(-beta,self.qubits[i]) for i in range(self.N_qubits)]
+
+        circuit.append(mixer_operators)
 
         return circuit
 
     def apply_AOA_mixing_operator(self,circuit,beta):
         '''
         Apply the Quantum Alternating-Ansatz mixing operator
-
         B_odd/even =  X_a X_{a+1} + Y_a Y_{a+1}
-
         U(B) = Exp[-i beta B]
-
         As in the ArXiv: 1911.05296, we user long and short position parity mixers
-
         '''
-        mixer_operator = self.exp_XX_YY(-beta).to_instruction()
 
         # Short position parity mixer
         # Over the X_odd X_{odd+1}+Y_odd Y_{odd+1}
-
-        [circuit.append(mixer_operator,[self.qubits[i],self.qubits[i+2]]) for i in range(1,self.N_qubits-2,2)]
-
- #       for i in range(1,self.N_qubits-2,2):
- #           circuit.append(self.exp_XX_YY(angle=-beta,qubit1=self.qubits[i],qubit2=self.qubits[i+2]))
+        for i in range(1,self.N_qubits-2,2):
+            circuit.append(self.exp_XX_YY(angle=-beta,qubit1=self.qubits[i],qubit2=self.qubits[i+2]))
 
         # Long position parity mixer
         # Over the X_even X_{even+1}+Y_even Y_{even+1}
-        [circuit.append(mixer_operator,[self.qubits[i],self.qubits[i+2]]) for i in range(0,self.N_qubits-2,2)]
-
-#        for i in range(0,self.N_qubits-2,2):
-#            circuit.append(self.exp_XX_YY(angle=-beta,qubit1=self.qubits[i],qubit2=self.qubits[i+2]))
+        for i in range(0,self.N_qubits-2,2):
+            circuit.append(self.exp_XX_YY(angle=-beta,qubit1=self.qubits[i],qubit2=self.qubits[i+2]))
 
         # Final short position mixer
-        circuit.append(mixer_operator,[self.qubits[self.N_qubits-1],self.qubits[1]])
-#        circuit.append(self.exp_XX_YY(angle=-beta,qubit1=self.qubits[self.N_qubits-1],qubit2=self.qubits[1]))
-
-
+        circuit.append(self.exp_XX_YY(angle=-beta,qubit1=self.qubits[self.N_qubits-1],qubit2=self.qubits[1]))
 
         # Final long position mixer
-        circuit.append(mixer_operator,[self.qubits[self.N_qubits-2],self.qubits[0]])
-#        circuit.append(self.exp_XX_YY(angle=-beta,qubit1=self.qubits[self.N_qubits - 2], qubit2=self.qubits[0]))
+        circuit.append(self.exp_XX_YY(angle=-beta,qubit1=self.qubits[self.N_qubits - 2], qubit2=self.qubits[0]))
+
+        return circuit
+
+    def apply_measurements(self,circuit,key='m'):
+        '''
+        Applies the measurement operator all qubits on the circuit. The
+        default key for the measurement is 'm'
+        '''
+
+        measurements = cirq.measure(*self.qubits, key=key)
+
+        circuit.append(measurements)
 
         return circuit
 
@@ -348,57 +329,56 @@ class Portfolio():
     def apply_transaction_cost(self,circuit,gamma):
         '''
         Apply the transaction cost model
-
         C_{TC}(Z) = \sum_i (1-\delta(Zi-yi))*T
-
         T = transaction cost
         \delta(x-y) = { 1 if x=y, otherwise 0}
-
         '''
 
         for i in range(self.N_portfolio):
 
             sp_i, sm_i = self.portfolio_indices[i][1], self.portfolio_indices[i][2]
 
-            angle1 =  -(1/4)*self.T*(1-self.y[i]*self.y[i]-self.y[i])*gamma
-            circuit.append(self.exp_Z(angle1).to_instruction(),[self.qubits[sp_i]])
+            angle1 =  -(1/4)*self.T*(1-self.y[i]**2-self.y[i])*gamma
+            circuit.append(self.exp_Z(angle1,self.qubits[sp_i]))
 
-            angle2 = -(1/4)*self.T*(1-self.y[i]*self.y[i]+self.y[i])*gamma
-            circuit.append(self.exp_Z(angle2).to_instruction(),[self.qubits[sm_i]])
-            
-            angle3 = -(1/4)*self.T*(2*self.y[i]*self.y[i]-1)*gamma
-            circuit.append(self.exp_ZZ(-2*angle3).to_instruction(),[self.qubits[sp_i],self.qubits[sm_i]])
+            angle2 = -(1/4)*self.T*(1-self.y[i]**2+self.y[i])*gamma
+            circuit.append(self.exp_Z(angle2,self.qubits[sm_i]))
+
+            angle3 = -(1/4)*self.T*(2*self.y[i]**2-1)*gamma
+            circuit.append(self.exp_ZZ(-2*angle3,self.qubits[sp_i],self.qubits[sm_i]))
+
+
         return circuit
 
-   
+
     def apply_risk_return(self,circuit,gamma):
         '''
-
         Applies the circuit that represents the Portfolio risk-return
         cost function
         '''
+
 
         for i in range(self.N_portfolio):
 
             sp_i, sm_i = self.portfolio_indices[i][1],self.portfolio_indices[i][2]
 
             # Exp[-i*\sum_i mu_i/2(s^+_i -s^-_i)]
-            circuit.append(self.exp_Z((1-self.lam)*gamma*self.mu[i]/2).to_instruction() ,[self.qubits[sp_i]])
-            circuit.append(self.exp_Z(-(1-self.lam)*gamma*self.mu[i]/2).to_instruction(),[self.qubits[sm_i]])
+            circuit.append(self.exp_Z((1-self.lam)*gamma*self.mu[i]/2,self.qubits[sp_i] ))
+            circuit.append(self.exp_Z(-(1-self.lam)*gamma*self.mu[i]/2,self.qubits[sm_i] ))
 
             for j in range(self.N_portfolio):
 
                 sp_j, sm_j = self.portfolio_indices[j][1],self.portfolio_indices[j][2]
 
                 if(i !=j):
-                    circuit.append(self.exp_ZZ(-self.lam*gamma*(self.sigma[i][j]/4)).to_instruction(),[self.qubits[sp_i],self.qubits[sp_j]])
-                    circuit.append(self.exp_ZZ(self.lam*gamma *(self.sigma[i][j]/4)).to_instruction(),[self.qubits[sp_i], self.qubits[sm_j]])
-                    circuit.append(self.exp_ZZ(self.lam*gamma *(self.sigma[i][j]/4)).to_instruction(),[self.qubits[sm_i], self.qubits[sp_j]])
-                    circuit.append(self.exp_ZZ(-self.lam*gamma *(self.sigma[i][j]/4)).to_instruction(),[self.qubits[sm_i], self.qubits[sm_j]])
+                    circuit.append(self.exp_ZZ(-self.lam*gamma*(self.sigma[i][j]/4),self.qubits[sp_i],self.qubits[sp_j]))
+                    circuit.append(self.exp_ZZ(self.lam*gamma *(self.sigma[i][j]/4), self.qubits[sp_i], self.qubits[sm_j]))
+                    circuit.append(self.exp_ZZ(self.lam*gamma *(self.sigma[i][j]/4), self.qubits[sm_i], self.qubits[sp_j]))
+                    circuit.append(self.exp_ZZ(-self.lam*gamma *(self.sigma[i][j]/4), self.qubits[sm_i], self.qubits[sm_j]))
 
                 else:
-                    circuit.append(self.exp_ZZ(self.lam*gamma *(self.sigma[i][j]/4)).to_instruction(),[self.qubits[sp_i], self.qubits[sm_j]])
-                    circuit.append(self.exp_ZZ(self.lam*gamma *(self.sigma[i][j]/4)).to_instruction(),[self.qubits[sm_i], self.qubits[sp_j]])
+                    circuit.append(self.exp_ZZ(self.lam*gamma *(self.sigma[i][j]/4), self.qubits[sp_i], self.qubits[sm_j]))
+                    circuit.append(self.exp_ZZ(self.lam*gamma *(self.sigma[i][j]/4), self.qubits[sm_i], self.qubits[sp_j]))
 
         return circuit
 
@@ -407,21 +387,19 @@ class Portfolio():
         '''
         Constructs the circuit that represents the soft constraint and applies
         the Gamma angle.
-
         C = A*(\sum_i Z_i -D)^2
-
         U = Exp[-i gamma * C]
         '''
 
- #       self.A = Parameter("A")
+        self.A = sympy.symbols("A")
 
         for i in range(self.N_portfolio):
 
             sp_i, sm_i = self.portfolio_indices[i][1],self.portfolio_indices[i][2]
 
             # Exp[-i*AD*\sum_i (s^+_i -s^-_i)]
-            circuit.append(self.exp_Z(-gamma*self.A*self.D).to_instruction(),[self.qubits[sp_i]])
-            circuit.append(self.exp_Z(gamma*self.A*self.D).to_instruction(),[self.qubits[sm_i]])
+            circuit.append(self.exp_Z(-gamma*self.A*self.D,self.qubits[sp_i] ))
+            circuit.append(self.exp_Z(gamma*self.A*self.D,self.qubits[sm_i] ))
 
             for j in range(self.N_portfolio):
 
@@ -429,23 +407,21 @@ class Portfolio():
 
 
                 if(i !=j):
-                    circuit.append(self.exp_ZZ(-gamma*(self.A/4)).to_instruction(),[self.qubits[sp_i],self.qubits[sp_j]])
-                    circuit.append(self.exp_ZZ(gamma * (self.A / 4)).to_instruction(),[self.qubits[sp_i], self.qubits[sm_j]])
-                    circuit.append(self.exp_ZZ(gamma * (self.A / 4)).to_instruction(),[self.qubits[sm_i], self.qubits[sp_j]])
-                    circuit.append(self.exp_ZZ(-gamma * (self.A / 4)).to_instruction(),[self.qubits[sm_i], self.qubits[sm_j]])
+                    circuit.append(self.exp_ZZ(-gamma*(self.A/4),self.qubits[sp_i],self.qubits[sp_j]))
+                    circuit.append(self.exp_ZZ(gamma * (self.A / 4), self.qubits[sp_i], self.qubits[sm_j]))
+                    circuit.append(self.exp_ZZ(gamma * (self.A / 4), self.qubits[sm_i], self.qubits[sp_j]))
+                    circuit.append(self.exp_ZZ(-gamma * (self.A / 4), self.qubits[sm_i], self.qubits[sm_j]))
 
                 else:
-                    circuit.append(self.exp_ZZ(gamma * (self.A / 4)).to_instruction(), [self.qubits[sp_i], self.qubits[sm_j]])
-                    circuit.append(self.exp_ZZ(gamma * (self.A / 4)).to_instruction(), [self.qubits[sm_i], self.qubits[sp_j]])
+                    circuit.append(self.exp_ZZ(gamma * (self.A / 4), self.qubits[sp_i], self.qubits[sm_j]))
+                    circuit.append(self.exp_ZZ(gamma * (self.A / 4), self.qubits[sm_i], self.qubits[sp_j]))
 
         return circuit
-
 
     def measure_circuit(self,circuit,parameters={}, betas= None,gammas=None,key='m',n_trials=100):
         '''
         This function resolves the input parameters and carries out the measurements of the circuits.
         All symbolic parameters are resolved into values for calculation.
-
         Keyword arguments:
         A - the penalty scaling coefficient
         D - the investment constraint
@@ -473,8 +449,7 @@ class Portfolio():
         resolved_params ={}
 
         # The cirq simulator object
-        backend=BasicAer.get_backend('qasm_simulator')
-#        simulator = cirq.Simulator()
+        simulator = cirq.Simulator()
 
         # This parameters only exists for the QAOA cicuit with soft constraints
         try:
@@ -505,7 +480,6 @@ class Portfolio():
         if(betas is not None):
 
             for k in range(len(betas)):
-#                print(self.betas)
                 resolved_params[self.betas[k]] = betas[k]
 
         if(gammas is not None):
@@ -518,32 +492,22 @@ class Portfolio():
                 for k2 in range(self.N_portfolio):
                     resolved_params[self.sigma[k1][k2]] = sigma[k1,k2]
 
-        # Resolve all of the symbolic parameters in the circuit 
-        parameter_binds = [resolved_params]
+        # Resolve all of the symbolic parameters in the circuit
+        resolver = cirq.ParamResolver(resolved_params)
+
         # Carry out the n_trial measurements
+        results = simulator.run(circuit,resolver,repetitions=n_trials)
 
-        job = execute(circuit,
-              backend=backend,
-              parameter_binds=[resolved_params],
-              shots=n_trials,
-              memory=True)
-#
-        bit = job.result().get_memory(circuit)
+        # Extract the bitstrings that were measured
+        bitstrings = results.measurements[key]
 
-        bitstrings= [[int(d) for d in str(bit[k])] for k in range(0,len(bit))]
-
-
-#        print(bitstrings)
-    
         return bitstrings
 
     def convert_bitstring_to_z(self,x):
         '''
         Convert a bit string of the measured qubits to
         portfolio holding.
-
         f(x+,x-) = x+ - x- = y
-
         example:
         x=[1,0,0,0] -> y=[1,0]
         '''
@@ -559,11 +523,8 @@ class Portfolio():
 
     def compute_penalty(self,A,D,zi):
         '''
-
-        Compute the soft-constraint Penalty function for 
-
+        Compute the soft-constraint Penalty function for
         penalty = A*(\sum Z_i -D)^2
-
         keyword arguments:
         A - The penalty scaling parameter
         D - The investment constraint
@@ -575,12 +536,9 @@ class Portfolio():
 
     def compute_portfolio_cost(self,lam,mu,sigma,zi):
         '''
-
         The portfolio cost function for a single bitstring representing the
         holdings.
-
         C_RR(z) = \lambda \sum_{i,j} \sigma_{i,j} z_i z_j -(1-\lambda)*\sum_i \mu_i z_i
-
         keyword arguments:
         lam - Asset manager control parameter
         mu -  The normalized average asset returns vector
@@ -639,10 +597,8 @@ class Portfolio():
 
     def compute_transaction_cost(self,T,y,zi):
         '''
-
         Transaction costs
         C_T = \sum_i T*(1-\delta(y_i-z_i))
-
         keyword arguments:
         T - transactions costs
         y - previous portfolio holdings
@@ -658,9 +614,7 @@ class Portfolio():
 
     def compute_transaction_cost_expectation_value(self,parameters,portfolio_holdings):
         '''
-
         The expectation value of the cost function
-
         keyword arguments:
         portfolio_holdings - dictionary of all the simulated portfolio holdings
         T - Transaction costs
@@ -681,8 +635,6 @@ class Portfolio():
 
     def compute_portfolio_cost_expectation_value(self,parameters,portfolio_holdings):
         '''
-
-
         keyword arguments:
         portfolio_holdings -
         sigma -
@@ -706,9 +658,7 @@ class Portfolio():
 
     def compute_penalty_expectation_value(self,parameters,portfolio_holdings):
         '''
-
         Compute the cost of the soft constraint
-
         '''
 
         A = parameters['A']
@@ -758,9 +708,7 @@ class Portfolio():
         '''
 
         gammas = x[0:p]
-#        print('gammas=',gammas)
         betas = x[p:]
-
         bitstrings = self.measure_circuit(circuit, parameters=parameters, betas=betas, gammas=gammas, n_trials=n_trials)
         portfolio_holdings = self.convert_bitstrings_to_portfolio_holdings(bitstrings)
         energy_expectation_value = self.compute_total_cost_expectation_value(portfolio_holdings, parameters)
@@ -815,7 +763,6 @@ class Portfolio():
     def optimize_circuit(self,circuit,parameters,n_trials,p,maxiter=50):
         '''
         Carry out the optimization of a specified circuit using the scipy-minimizer
-
         '''
 
         x0 = np.random.rand(2*p)
@@ -829,11 +776,8 @@ class Portfolio():
         print('='*100)
 
         # get the other results
-
-
         gammas = res.x[0:p]
         betas = res.x[p:]
-       
         bitstrings = self.measure_circuit(circuit, parameters=parameters, betas=betas, gammas=gammas, n_trials=n_trials)
         portfolio_holdings = self.convert_bitstrings_to_portfolio_holdings(bitstrings)
         energy_expectation_value = self.compute_total_cost_expectation_value(portfolio_holdings, parameters)
@@ -853,7 +797,6 @@ class Portfolio():
     def optimize_circuit_angles_cross_entropy(self,circuit,parameters,p,n_trials,iterations,f_elite,Nce_samples):
         '''
         This function uses the cross-entropy method to optimize the circuit angle parameters.
-
         keyword arguments:
         parameters - dictionary with parameters for the quantum circuit
         p - the depth of the QAOA circuit
@@ -957,7 +900,6 @@ class Portfolio():
 
     def convert_bitstrings_to_portfolio_holdings(self,bitstrings):
         '''
-
         Convert the bitstring from the individual qubit measurements to
         the corresponding values that correspond to portfolio positions:
         ie. Zi = x^+_i - x^-_i
@@ -1082,7 +1024,6 @@ class Portfolio():
                 beta = betas[k1]
                 gamma = gammas[k2]
                 bitstrings = self.measure_circuit(circuit,parameters=parameters,betas=[beta],gammas=[gamma],n_trials=n_trials)
-            
                 portfolio_holdings = self.convert_bitstrings_to_portfolio_holdings(bitstrings)
 
                 penalty_cost = self.compute_penalty_expectation_value(parameters,portfolio_holdings)
@@ -1147,8 +1088,6 @@ class Portfolio():
         ax1.set_title(r'$\langle \psi| C(z)|\psi \rangle$ vs $p$ [{}]'.format(optimizer_name) , fontsize=25)
         ax1.set_xlabel(r"$p$-depth", fontsize=15)
         ax1.set_ylabel(r"$\langle \psi| C(z)|\psi \rangle$", fontsize=15)
-
-
         ax1.plot(p_depth, [optimizer_data[k]['optimal_energy_measurement'] for k in range(len(p_depth))]
                  , marker='o',
                  markersize=15)
@@ -1156,9 +1095,6 @@ class Portfolio():
         ax2.set_title(r'$\langle x*| C(z)|x* \rangle$ vs $p$ [{}]'.format(optimizer_name), fontsize=25)
         ax2.set_ylabel(r"$\langle x*| C(z)|x* \rangle$", fontsize=15)
         ax2.set_xlabel(r"$p$-depth", fontsize=15)
-
-        
-
         ax2.plot(p_depth,
                  [optimizer_data[k]['best_solutions']['minimum_cost'] for k in range(len(p_depth))],
                  marker='o',

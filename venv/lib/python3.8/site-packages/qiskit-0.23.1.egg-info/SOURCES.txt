@@ -1,0 +1,10 @@
+README.md
+setup.cfg
+setup.py
+qiskit.egg-info/PKG-INFO
+qiskit.egg-info/SOURCES.txt
+qiskit.egg-info/dependency_links.txt
+qiskit.egg-info/requires.txt
+qiskit.egg-info/top_level.txt
+test/test_metapackage.py
+test/test_simulation.py

@@ -17,7 +17,7 @@ After installing the virtual environment locally, run the
 following command to install the environment requirements
 
 `python -m pip install --upgrade pip`
-`python install -r requirements.txt`
+`pip install -r requirements.txt`
 
 
 # Activate environment
